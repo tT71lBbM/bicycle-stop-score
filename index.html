@@ -1,0 +1,156 @@
+<title>自転車停止マップ</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --fg: #1a1d23;
+    --fg-sub: #6b7280;
+    --border: #e2e5ea;
+    --green: #22c55e;
+    --red: #ef4444;
+    --accent: #3b82f6;
+    --header-h: 56px;
+    font-family: 'Noto Sans JP', 'Hiragino Sans', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1117; --surface: #1a1d23; --fg: #f0f2f5;
+      --fg-sub: #9ca3af; --border: #2d3139; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1117; --surface: #1a1d23; --fg: #f0f2f5;
+    --fg-sub: #9ca3af; --border: #2d3139; color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--fg); }
+  #header {
+    position: sticky; top: 0; z-index: 1000;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    height: var(--header-h); display: flex; align-items: center;
+    gap: 12px; padding-inline: 16px;
+  }
+  #header h1 { font-size: 15px; font-weight: 700; white-space: nowrap; }
+  #session-select {
+    flex: 1; min-width: 0; max-width: 220px; height: 34px;
+    padding-inline: 10px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--fg); font-size: 13px;
+  }
+  #score-badge {
+    font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--accent);
+  }
+  #map { width: 100%; height: calc(100% - var(--header-h)); }
+  #legend {
+    position: absolute; bottom: 28px; left: 12px; z-index: 1000;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 12px; color: var(--fg-sub);
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+<div id="header">
+  <h1>🚲 停止マップ</h1>
+  <select id="session-select"></select>
+  <div id="score-badge">--</div>
+</div>
+<div id="map"></div>
+<div id="legend">
+  <div class="legend-item"><div class="dot" style="background:var(--green)"></div>停止あり</div>
+  <div class="legend-item"><div class="dot" style="background:var(--red)"></div>停止なし</div>
+</div>
+
+<script>
+// near_log.csv の内容をここに反映（Piが自動更新）
+const CSV_URL = 'near_log.csv';
+
+async function loadCSV() {
+  try {
+    const res = await fetch(CSV_URL);
+    const text = await res.text();
+    return parseCSV(text);
+  } catch(e) {
+    // フォールバック: ダミーデータ
+    return parseCSV(`走行ID,時刻(JST),地点ID,緯度,経度,距離(m),速度(km/h),方位角(°),停止判定
+1,2026-10-10 09:01:00,1,35.6812,139.7671,2.1,0.0,90,True
+1,2026-10-10 09:05:00,2,35.6820,139.7685,4.3,8.2,45,False
+1,2026-10-10 09:10:00,3,35.6835,139.7700,1.8,0.0,180,True
+2,2026-10-11 08:30:00,1,35.6812,139.7671,1.5,0.0,90,True
+2,2026-10-11 08:35:00,2,35.6820,139.7685,5.0,10.1,45,False
+2,2026-10-11 08:40:00,3,35.6835,139.7700,2.9,6.5,180,True`);
+  }
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',');
+  return lines.slice(1).map(line => {
+    const vals = line.split(',');
+    const obj = {};
+    headers.forEach((h, i) => obj[h.trim()] = vals[i]?.trim());
+    return obj;
+  });
+}
+
+const map = L.map('map');
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+
+let markers = [];
+
+function makeIcon(stopped) {
+  const color = stopped ? '#22c55e' : '#ef4444';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 26 34">
+    <path d="M13 0C5.82 0 0 5.82 0 13c0 9.75 13 21 13 21S26 22.75 26 13C26 5.82 20.18 0 13 0z" fill="${color}"/>
+    <circle cx="13" cy="13" r="6" fill="white"/></svg>`;
+  return L.divIcon({ html: svg, className: '', iconSize: [26,34], iconAnchor: [13,34], popupAnchor: [0,-34] });
+}
+
+function showSession(rows, sessionId) {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  const filtered = rows.filter(r => r['走行ID'] === sessionId);
+  if (!filtered.length) return;
+  let stopCount = 0;
+  const latlngs = [];
+  filtered.forEach(r => {
+    const lat = parseFloat(r['緯度']), lng = parseFloat(r['経度']);
+    const stopped = r['停止判定'] === 'True';
+    if (stopped) stopCount++;
+    const m = L.marker([lat,lng], {icon: makeIcon(stopped)})
+      .bindPopup(`<b>地点 ${r['地点ID']}</b><br>${r['時刻(JST)']}<br>距離: ${r['距離(m)']}m<br><b>${stopped?'✅ 停止':'❌ 未停止'}</b>`);
+    m.addTo(map); markers.push(m); latlngs.push([lat,lng]);
+  });
+  if (latlngs.length > 1) {
+    const line = L.polyline(latlngs, {color:'#3b82f6', weight:2.5, opacity:0.6, dashArray:'6 4'});
+    line.addTo(map); markers.push(line);
+  }
+  const pct = Math.round(stopCount / filtered.length * 100);
+  document.getElementById('score-badge').textContent = `${stopCount}/${filtered.length} (${pct}%)`;
+  map.fitBounds(L.latLngBounds(latlngs), {padding:[40,40]});
+}
+
+loadCSV().then(rows => {
+  const sessions = [...new Set(rows.map(r => r['走行ID']))].sort((a,b)=>+a-+b);
+  const sel = document.getElementById('session-select');
+  sessions.forEach(sid => {
+    const date = rows.find(r => r['走行ID'] === sid)?.['時刻(JST)']?.slice(0,10) ?? '';
+    const opt = document.createElement('option');
+    opt.value = sid;
+    opt.textContent = `走行 ${sid}（${date}）`;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', () => showSession(rows, sel.value));
+  showSession(rows, sessions[0]);
+});
+    </script>
