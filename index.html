@@ -94,6 +94,7 @@ function showSession(nearRows, routeRows, sessionId) {
   layers.forEach(l => map.removeLayer(l));
   layers = [];
 
+  // ルートライン
   const routeFiltered = routeRows.filter(r => r['走行ID'] === sessionId);
   const routeLatLngs = routeFiltered
     .map(r => [parseFloat(r['緯度']), parseFloat(r['経度'])])
@@ -104,8 +105,13 @@ function showSession(nearRows, routeRows, sessionId) {
     layers.push(line);
   }
 
+  // 停止ピン
   const nearFiltered = nearRows.filter(r => r['走行ID'] === sessionId);
-  if (!nearFiltered.length) return;
+  if (!nearFiltered.length) {
+    if (routeLatLngs.length) map.fitBounds(L.latLngBounds(routeLatLngs), {padding:[40,40]});
+    document.getElementById('score-badge').textContent = '--';
+    return;
+  }
   let stopCount = 0;
   const allLatLngs = [...routeLatLngs];
   nearFiltered.forEach(r => {
@@ -140,11 +146,14 @@ async function init() {
   const nearRows = nearText ? parseCSV(nearText) : [];
   const routeRows = routeText ? parseCSV(routeText) : [];
 
-  const sessions = [...new Set(nearRows.map(r => r['走行ID']))].sort((a,b) => +a - +b);
+  const sessions = [...new Set([
+    ...nearRows.map(r => r['走行ID']),
+    ...routeRows.map(r => r['走行ID'])
+  ])].sort((a,b) => +a - +b);
   const sel = document.getElementById('session-select');
   sel.innerHTML = '';
   sessions.forEach(sid => {
-    const row = nearRows.find(r => r['走行ID'] === sid);
+    const row = nearRows.find(r => r['走行ID'] === sid) || routeRows.find(r => r['走行ID'] === sid);
     const dt = row?.['時刻(JST)'] ?? '';
     const date = dt.slice(0,10), time = dt.slice(11,16);
     const opt = document.createElement('option');
