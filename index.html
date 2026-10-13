@@ -61,8 +61,8 @@ html, body { height: 100%; background: var(--bg); color: var(--fg); font-family:
 </div>
 
 <script>
-const NEAR_CSV = 'near_log.csv';
-const ROUTE_CSV = 'route_log.csv';
+const NEAR_CSV = 'near_log.csv?' + Date.now();
+const ROUTE_CSV = 'route_log.csv?' + Date.now();
 
 function parseCSV(text) {
   const lines = text.trim().split('\n');
