@@ -122,7 +122,8 @@ function init(text) {
     const date = rows.find(r => r['走行ID'] === sid)['時刻(JST)'].slice(0,10);
     const opt = document.createElement('option');
     opt.value = sid;
-    opt.textContent = '走行 ' + sid + '（' + date + '）';
+    const time = rows.find(r => r['走行ID'] === sid)?.['時刻(JST)']?.slice(11,16) ?? '';
+    opt.textContent = `走行 ${sid}（${date} ${time}）`;
     sel.appendChild(opt);
   });
   sel.addEventListener('change', () => showSession(rows, sel.value));
