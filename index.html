@@ -130,7 +130,7 @@ function showSession(nearRows, routeRows, sessionId) {
   });
 
   const pct = Math.round(stopCount / nearFiltered.length * 100);
-  document.getElementById('score-bar').textContent = `遵守率: ${stopCount}/${nearFiltered.length} (${pct}%)`;
+  document.getElementById('score-bar').textContent = `遵守率: ${pct}% (${stopCount}/${nearFiltered.length})`;
   if (allLatLngs.length) map.fitBounds(L.latLngBounds(allLatLngs), {padding:[40,40]});
 }
 
