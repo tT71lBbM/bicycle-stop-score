@@ -121,10 +121,10 @@ function showSession(nearRows, routeRows, sessionId) {
   nearFiltered.forEach(r => {
     const lat = parseFloat(r['緯度']), lng = parseFloat(r['経度']);
     if (isNaN(lat) || isNaN(lng)) return;
-    const stopped = r['停止判定'] === 'True';
+    const stopped = r['停止'] === 'True';
     if (stopped) stopCount++;
     const m = L.marker([lat,lng], {icon: makeIcon(stopped)})
-      .bindPopup(`<b>地点 ${r['地点ID']}</b><br>${r['時刻(JST)']}<br>距離: ${r['距離(m)']}m　方位: ${r['方位角(°)']}°<br><b>${stopped ? '✅ 停止' : '❌ 未停止'}</b>`);
+      .bindPopup(`<b>地点 ${r['地点ID']}</b><br>${r['時刻(JST)']}<br>距離: ${r['距離(m)']}m　方位: ${r['方位角(deg)']}°<br><b>${stopped ? '✅ 停止' : '❌ 未停止'}</b>`);
     m.addTo(map); layers.push(m);
     allLatLngs.push([lat, lng]);
   });
