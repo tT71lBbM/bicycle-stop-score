@@ -12,7 +12,8 @@ HEADING_TOLERANCE    = 45       # 方位許容角 (°)
 # ===== ファイルパス =====
 LOG_FILE      = 'log.csv'
 GEOJSON_FILE  = 'stop_edited.geojson'
-NEAR_LOG_FILE = 'near_log.csv'
+NEAR_LOG_FILE  = 'near_log.csv'
+ROUTE_LOG_FILE = 'route_log.csv'
 
 # ===== GeoJSONから一時停止座標の読み込み =====
 def load_stop_points(filepath):
@@ -192,3 +193,8 @@ near_df = pd.DataFrame(near_log_rows, columns=[
 ])
 near_df.to_csv(NEAR_LOG_FILE, index=False)
 print(f"\nnear_log.csv を出力しました（{len(near_df)}行）")
+
+# route_log.csv出力（全GPSログをそのまま出力）
+route_df = df[['走行ID', '時刻(JST)', '緯度', '経度', '速度(km/h)', '方位角(deg)']].copy()
+route_df.to_csv(ROUTE_LOG_FILE, index=False)
+print(f"route_log.csv を出力しました（{len(route_df)}行）")
