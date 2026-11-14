@@ -47,7 +47,8 @@ ROUTE_LOG_FILE = 'route_log.csv'
 VISIT_LOG_FILE = 'visit_log.csv'    # 対象外を含む全訪問の記録（検証用）
 
 NEAR_COLUMNS  = ['走行ID', '時刻(JST)', '地点ID', '緯度', '経度', '距離(m)',
-                 '速度(km/h)', '方位角(deg)', '停止']
+                 '速度(km/h)', '方位角(deg)', '停止',
+                 '地点緯度', '地点経度']   # 地点緯度・経度 = GeoJSONの一時停止地点の座標（地図のピン用）
 VISIT_COLUMNS = ['走行ID', '進入時刻', '退出時刻', '地点ID', '地点方位(deg)',
                  '進入方位(deg)', '方位差(deg)', '判定対象', '停止', '最小距離(m)', '最長静止(s)']
 ROUTE_COLUMNS = ['走行ID', '時刻(JST)', '緯度', '経度', '速度(km/h)', '方位角(deg)']
@@ -155,6 +156,7 @@ def process_ride(ride_id, group, grid):
             '緯度': f"{r['lat']:.6f}", '経度': f"{r['lon']:.6f}", '距離(m)': fmt(d),
             '速度(km/h)': fmt(r['speed'], 2), '方位角(deg)': fmt(r['heading'], 2),
             '停止': 'True' if v['stopped'] else 'False',
+            '地点緯度': f"{s['lat']:.7f}", '地点経度': f"{s['lon']:.7f}",
         })
 
     for _, row in group.iterrows():
