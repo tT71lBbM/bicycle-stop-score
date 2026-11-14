@@ -128,6 +128,73 @@ def fmt(v, nd=1):
     return '--' if v is None else f"{v:.{nd}f}"
 
 
+# ===== 地図表示用のルート整形 =====
+# ここで整えるのは route_log.csv（地図に描く線）だけ。停止判定には元の座標を使う
+ROUTE_M_LAT = 110540.0
+
+
+def clean_route(points, span_m=15.0, straight_deg=25.0, lateral_m=2.0):
+    """地図表示用：寄せた座標の「とげ」（横に飛んで戻る点）を取り除く。
+    points: [(lat, lon), ...]（同じ座標が続く点はまとめておく）
+    点Pについて、直前の点Aより span_m 手前から A までの向き（来た向き）と、
+    直後の点Bから span_m 先までの向き（行く向き）が straight_deg 度以内で同じ（=まっすぐ進んでいる）なのに、
+    P が A–B を結ぶ線から lateral_m 以上横にずれていれば「とげ」とみなす。
+    曲がり角は来た向きと行く向きが違うので消さない。消えた点がなくなるまで繰り返す。
+    戻り値：残す点の番号のリスト"""
+    if len(points) < 3:
+        return list(range(len(points)))
+    m_lon = 111320.0 * math.cos(math.radians(points[0][0]))
+    xy = [((lon - points[0][1]) * m_lon, (lat - points[0][0]) * ROUTE_M_LAT) for lat, lon in points]
+
+    def bearing(p, q):
+        return math.degrees(math.atan2(q[0] - p[0], q[1] - p[1])) % 360
+
+    def adiff(a, b):
+        d = abs(a - b) % 360
+        return 360 - d if d > 180 else d
+
+    keep = list(range(len(points)))
+    changed = True
+    while changed:
+        changed = False
+        P = [xy[i] for i in keep]
+        drop = set()
+        for k in range(1, len(keep) - 1):
+            if k - 1 in drop:
+                continue
+            a, p, b = P[k - 1], P[k], P[k + 1]
+            # A から span_m 手前の点、B から span_m 先の点を探す
+            j = k - 1
+            while j > 0 and math.dist(P[j], a) < span_m:
+                j -= 1
+            m = k + 1
+            while m < len(P) - 1 and math.dist(P[m], b) < span_m:
+                m += 1
+            if math.dist(P[j], a) < span_m * 0.5 or math.dist(P[m], b) < span_m * 0.5:
+                continue                      # 端で前後の向きが分からない
+            come, go = bearing(P[j], a), bearing(b, P[m])
+            if adiff(come, go) > straight_deg:
+                continue                      # 曲がっている → 角なので残す
+            ab = math.dist(a, b)
+            if ab < 0.1:
+                lateral = math.dist(a, p)
+            else:
+                lateral = abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1])) / ab
+            if lateral >= lateral_m:
+                drop.add(k)
+        if drop:
+            keep = [keep[k] for k in range(len(keep)) if k not in drop]
+            changed = True
+    return keep
+
+
+def route_rows_for_display(ride_df):
+    """同じ座標が続く行は最初の1行にまとめ、とげの点を除いた行を返す"""
+    g = ride_df[(ride_df['緯度'].diff() != 0) | (ride_df['経度'].diff() != 0)]
+    keep = clean_route(list(zip(g['緯度'].astype(float), g['経度'].astype(float))))
+    return g.iloc[keep][ROUTE_COLUMNS].to_dict('records')
+
+
 # ===== 1走行の処理 =====
 def process_ride(ride_id, group, grid):
     near_rows, visit_rows = [], []
@@ -293,7 +360,10 @@ def main():
 
     append_and_write(NEAR_LOG_FILE, all_near, NEAR_COLUMNS, old[NEAR_LOG_FILE])
     append_and_write(VISIT_LOG_FILE, all_visits, VISIT_COLUMNS, old[VISIT_LOG_FILE])
-    route_rows = df[df['走行ID'].isin(new_ids)][ROUTE_COLUMNS].to_dict('records')
+    # 地図に描くルート：寄せた座標の「とげ」を除いて見やすくする（表示専用。判定には使わない）
+    route_rows = []
+    for _, group in df[df['走行ID'].isin(new_ids)].groupby('走行ID'):
+        route_rows += route_rows_for_display(group)
     append_and_write(ROUTE_LOG_FILE, route_rows, ROUTE_COLUMNS, old[ROUTE_LOG_FILE])
 
 
