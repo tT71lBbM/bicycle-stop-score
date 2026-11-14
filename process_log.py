@@ -63,15 +63,47 @@ def find_nearest_stop(lat, lon, heading, stop_points):
             best_heading_ok = check_heading(heading, stop['direction'])
     return best_stop, best_dist if best_stop else None, best_heading_ok
 
+import os
+
 # ===== メイン処理 =====
 print("ログ読み込み中...")
 df = pd.read_csv(LOG_FILE)
 stop_points = load_stop_points(GEOJSON_FILE)
 print(f"ログ行数: {len(df)}, 一時停止地点数: {len(stop_points)}")
 
+# 既存の処理済み走行IDを確認（差分処理）
+processed_ride_ids = set()
+existing_near_rows = []
+existing_route_rows = []
+
+if os.path.exists(NEAR_LOG_FILE):
+    try:
+        existing_near_df = pd.read_csv(NEAR_LOG_FILE)
+        if len(existing_near_df) > 0:
+            processed_ride_ids = set(existing_near_df['走行ID'].unique())
+            existing_near_rows = existing_near_df.to_dict('records')
+            print(f"既存のnear_log: 走行ID {sorted(processed_ride_ids)} は処理済み、スキップします")
+    except:
+        pass
+
+if os.path.exists(ROUTE_LOG_FILE):
+    try:
+        existing_route_df = pd.read_csv(ROUTE_LOG_FILE)
+        if len(existing_route_df) > 0:
+            existing_route_rows = existing_route_df.to_dict('records')
+    except:
+        pass
+
+# 新しい走行IDのみ処理
+new_ride_ids = [rid for rid in df['走行ID'].unique() if rid not in processed_ride_ids]
+if not new_ride_ids:
+    print("新しい走行データはありません")
+    exit(0)
+print(f"新規処理対象: 走行ID {new_ride_ids}")
+
 near_log_rows = []
 
-for ride_id, group in df.groupby('走行ID'):
+for ride_id, group in df[df['走行ID'].isin(new_ride_ids)].groupby('走行ID'):
     group = group.reset_index(drop=True)
     print(f"\n走行ID {ride_id} を処理中（{len(group)}行）...")
 
@@ -187,14 +219,18 @@ for ride_id, group in df.groupby('走行ID'):
     rate = stop_count / total_near * 100 if total_near > 0 else 0
     print(f"  結果: {stop_count}/{total_near} ({rate:.0f}%)")
 
-# near_log.csv出力
-near_df = pd.DataFrame(near_log_rows, columns=[
+# near_log.csv出力（既存データに追記）
+all_near_rows = existing_near_rows + near_log_rows
+near_df = pd.DataFrame(all_near_rows, columns=[
     '走行ID', '時刻(JST)', '地点ID', '緯度', '経度', '距離(m)', '速度(km/h)', '方位角(deg)', '停止'
 ])
 near_df.to_csv(NEAR_LOG_FILE, index=False)
-print(f"\nnear_log.csv を出力しました（{len(near_df)}行）")
+print(f"\nnear_log.csv を出力しました（{len(near_df)}行、うち新規{len(near_log_rows)}行）")
 
-# route_log.csv出力（全GPSログをそのまま出力）
-route_df = df[['走行ID', '時刻(JST)', '緯度', '経度', '速度(km/h)', '方位角(deg)']].copy()
+# route_log.csv出力（既存データに新規走行分を追記）
+new_route_df = df[df['走行ID'].isin(new_ride_ids)][['走行ID', '時刻(JST)', '緯度', '経度', '速度(km/h)', '方位角(deg)']].copy()
+new_route_rows = new_route_df.to_dict('records')
+all_route_rows = existing_route_rows + new_route_rows
+route_df = pd.DataFrame(all_route_rows, columns=['走行ID', '時刻(JST)', '緯度', '経度', '速度(km/h)', '方位角(deg)'])
 route_df.to_csv(ROUTE_LOG_FILE, index=False)
-print(f"route_log.csv を出力しました（{len(route_df)}行）")
+print(f"route_log.csv を出力しました（{len(route_df)}行、うち新規{len(new_route_rows)}行）")
