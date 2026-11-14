@@ -4,12 +4,21 @@ on:
   push:
     paths:
       - 'log.csv'
+      - 'process_log.py'
+      - 'stop_edited.geojson'
+
+# 続けてpushされたときに、判定とコミットが同時に走って衝突しないよう1つずつ実行する
+concurrency:
+  group: process-log
+  cancel-in-progress: false
 
 jobs:
   process:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # 何のファイルが変わったかを調べるため履歴を取得
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -19,13 +28,40 @@ jobs:
       - name: Install dependencies
         run: pip install pandas
 
+      - name: Decide mode
+        id: mode
+        run: |
+          BEFORE="${{ github.event.before }}"
+          # 初回pushなどで比較できないときは全判定
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "比較できる前のコミットがないため、全走行を判定し直します"
+            echo "args=--all" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          echo "変更されたファイル:"; echo "$CHANGED"
+          if echo "$CHANGED" | grep -qxE 'process_log\.py|stop_edited\.geojson'; then
+            echo "判定ロジックか地点データが変わったため、全走行を判定し直します"
+            echo "args=--all" >> "$GITHUB_OUTPUT"
+          else
+            echo "log.csv の更新のため、未判定の走行だけ判定します"
+            echo "args=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run process script
-        run: python process_log.py
+        run: python process_log.py ${{ steps.mode.outputs.args }}
 
       - name: Commit results
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add near_log.csv route_log.csv
-          git diff --cached --quiet || git commit -m "auto: update near_log and route_log"
+          git add near_log.csv route_log.csv visit_log.csv
+          if git diff --cached --quiet; then
+            echo "変更なし"
+            exit 0
+          fi
+          git commit -m "auto: update near_log, route_log, visit_log"
+          # 判定中にPiから新しいlog.csvがpushされていても取り込んでからpushする
+          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
